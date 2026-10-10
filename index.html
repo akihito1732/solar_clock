@@ -22,7 +22,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500&family=JetBrains+Mono:wght@300;400&display=swap">
 <style>
 /* Layout: 3ページ（カレンダー／ホーム／タスク）。下に浮かぶガラスのタブバー。
-   インクと紙の二色に、すりガラスの面を重ねる。後ろには薄い軌道と星座が透ける。 */
+   インクと紙の二色に、すりガラスの面を重ねる。時計はホームだけ。
+   カレンダーとタスクでは、後ろに薄い軌道と星座が透ける。 */
 :root {
   --bg: #f4f4f2;
   --fg: #161616;
@@ -67,6 +68,8 @@
 :root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
+/* hidden 属性を、display を指定した要素でも必ず効かせる（ページ切り替えに使う） */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -77,9 +80,9 @@ body {
   transition: background-color .3s, color .3s;
 }
 button { font: inherit; color: inherit; touch-action: manipulation; }
+#sky { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; transition: opacity .3s; }
 button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outline-offset: 2px; }
 
-#sky { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 
 .page {
   position: relative;
@@ -617,7 +620,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
   });
   $('taskChip').addEventListener('click', () => show('tasks'));
 
-  // ---------- 背景（ガラス越しに透ける軌道と星座） ----------
+  // ---------- 背景（ガラス越しに透ける軌道と星座。カレンダーとタスクのページだけ） ----------
   const sky = $('sky'), sctx = sky.getContext('2d');
   function drawSky() {
     const w = innerWidth, h = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
@@ -1051,8 +1054,8 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
     const changed = p !== page;
     page = p;
     PAGES.forEach(x => { $('page-' + x).hidden = x !== p; });
-    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === p));
     sky.style.opacity = p === 'home' ? '0' : '1';
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === p));
     placeLens(changed);
     if (p === 'calendar') renderCalendar();
     if (p === 'tasks') { editId = null; confirmId = null; renderTasks(); }
