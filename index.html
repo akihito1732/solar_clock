@@ -41,6 +41,7 @@
   --sheen: linear-gradient(160deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 40%);
   --lens: rgba(255, 255, 255, .8);
   --seg: rgba(0, 0, 0, .05);
+  --menu: rgba(248, 248, 246, .84);
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --tab-space: calc(100px + env(safe-area-inset-bottom, 0px));
@@ -52,7 +53,7 @@
     --glass: rgba(38, 38, 36, .4); --glass-edge: rgba(255, 255, 255, .14); --glass-hi: rgba(255, 255, 255, .2);
     --glass-lo: rgba(0, 0, 0, .5); --glass-shadow: rgba(0, 0, 0, .55);
     --sheen: linear-gradient(160deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 42%);
-    --lens: rgba(255, 255, 255, .13); --seg: rgba(255, 255, 255, .06);
+    --lens: rgba(255, 255, 255, .13); --seg: rgba(255, 255, 255, .06); --menu: rgba(26, 26, 24, .86);
     color-scheme: dark;
   }
 }
@@ -62,7 +63,7 @@
   --glass: rgba(38, 38, 36, .4); --glass-edge: rgba(255, 255, 255, .14); --glass-hi: rgba(255, 255, 255, .2);
   --glass-lo: rgba(0, 0, 0, .5); --glass-shadow: rgba(0, 0, 0, .55);
   --sheen: linear-gradient(160deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 42%);
-  --lens: rgba(255, 255, 255, .13); --seg: rgba(255, 255, 255, .06);
+  --lens: rgba(255, 255, 255, .13); --seg: rgba(255, 255, 255, .06); --menu: rgba(26, 26, 24, .86);
   color-scheme: dark;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -184,6 +185,31 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
 .chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
 .chip .k { color: var(--mid); }
 .chip b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-wrap { position: relative; max-width: 100%; }
+.chev { width: 14px; height: 14px; fill: none; stroke: var(--mid); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: rotate .3s; }
+#taskChip[aria-expanded="true"] .chev { rotate: 180deg; }
+.menu {
+  position: absolute; z-index: 20;
+  bottom: calc(100% + 10px); left: 50%; translate: -50% 0;
+  width: max-content; min-width: 230px; max-width: calc(100vw - 32px);
+  max-height: 46vh; overflow-y: auto;
+  border-radius: 22px; padding: 6px;
+  transform-origin: 50% 100%;
+  background: var(--sheen), var(--menu);
+  animation: pop .35s cubic-bezier(.3, 1.4, .5, 1);
+}
+@keyframes pop { from { opacity: 0; scale: .86 .8; } }
+.menu button {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  border: 0; background: none; border-radius: 15px; padding: 11px 14px;
+  font-size: .9rem; text-align: left; cursor: pointer; transition: background-color .2s;
+}
+.menu button:hover { background: var(--seg); }
+.menu button[aria-selected="true"] { background: var(--lens); box-shadow: inset 0 1px 0 var(--glass-hi); }
+.menu .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .check { width: 16px; height: 16px; fill: none; stroke: var(--fg); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.menu hr { border: 0; border-top: 1px solid var(--faint); margin: 4px 10px; }
+.menu .manage { color: var(--mid); font-size: .8rem; }
 .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
 /* ---------- カレンダー ---------- */
@@ -256,6 +282,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
 .day-list .dur { color: var(--mid); }
 .day-list .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .day-list .none { display: block; color: var(--mid); font-size: .8rem; }
+#dayCard { scroll-margin-top: 16px; }
 .empty-card p { margin: 0 0 12px; font-size: .84rem; line-height: 1.8; color: var(--mid); }
 .empty-card h2 { font-size: .95rem; font-weight: 500; letter-spacing: .08em; margin: 0 0 6px; }
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 999px; padding: 6px 6px 6px 18px; font-size: .8rem; }
@@ -268,8 +295,19 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
 }
 .add input::placeholder { color: var(--mid); }
 .hint { font-size: .75rem; color: var(--mid); margin: 2px 8px 0; line-height: 1.8; }
-.task-list { list-style: none; margin: 0; padding: 6px; border-radius: 26px; }
-.task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 2px; border-radius: 20px; padding: 2px 4px; transition: background-color .25s; }
+.list-card { padding: 14px 6px 6px; }
+.list-card .card-head { padding: 0 10px 0 12px; }
+#editMode[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.task-list { list-style: none; margin: 0; padding: 0; }
+.task-row.editing { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding: 6px 8px 6px 14px; }
+.name-input {
+  font: inherit; font-size: 16px; color: var(--fg); background: var(--seg);
+  border: 1px solid transparent; border-radius: 12px; padding: 8px 10px; width: 100%; min-width: 0; outline: none;
+}
+.name-input:focus { border-color: var(--mid); }
+.del-btn { border: 1px solid var(--faint); background: none; }
+.task-empty { padding: 10px 12px 12px; font-size: .8rem; color: var(--mid); }
+.task-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 2px; border-radius: 20px; padding: 2px 4px; transition: background-color .25s; }
 .task-row + .task-row { margin-top: 2px; }
 .task-row.sel { background: var(--lens); box-shadow: inset 0 1px 0 var(--glass-hi); }
 .pick {
@@ -284,7 +322,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
 .tname span { overflow-wrap: anywhere; }
 .tmeta { font-size: .72rem; color: var(--mid); font-variant-numeric: tabular-nums; }
 .tname input { font: inherit; font-size: 16px; color: var(--fg); background: var(--seg); border: 0; border-radius: 10px; padding: 4px 8px; width: 100%; min-width: 0; outline: none; }
-.confirm { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 8px 10px 40px; font-size: .8rem; }
+.confirm { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 0 8px 20px; font-size: .8rem; }
 .confirm span { flex: 1 1 100%; color: var(--mid); line-height: 1.6; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -308,6 +346,16 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
       <h2>まだ記録がありません</h2>
       <p>ホームでポモドーロを始めると、作業した時間がここに貯まります。どんな画面になるか先に見たいときは、サンプルデータで表示できます。</p>
       <button class="pill primary" id="demoOn" type="button">サンプルで見る</button>
+    </article>
+
+    <article class="card glass" id="dayCard">
+      <div class="card-head">
+        <h2 id="dayTitle"></h2>
+        <div class="stat"><b id="dayTotal"></b></div>
+      </div>
+      <div class="band" id="band"></div>
+      <div class="axis"><span style="left:0">0</span><span style="left:25%">6</span><span style="left:50%">12</span><span style="left:75%">18</span><span style="left:100%">24</span></div>
+      <ul class="day-list" id="dayList"></ul>
     </article>
 
     <article class="card glass">
@@ -342,15 +390,6 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
       <div class="cal-grid" id="calGrid"></div>
     </article>
 
-    <article class="card glass">
-      <div class="card-head">
-        <h2 id="dayTitle"></h2>
-        <div class="stat"><b id="dayTotal"></b></div>
-      </div>
-      <div class="band" id="band"></div>
-      <div class="axis"><span style="left:0">0</span><span style="left:25%">6</span><span style="left:50%">12</span><span style="left:75%">18</span><span style="left:100%">24</span></div>
-      <ul class="day-list" id="dayList"></ul>
-    </article>
   </div>
 </section>
 
@@ -358,7 +397,10 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
 <section class="page home" id="page-home">
   <div class="disc" id="disc"><canvas id="cv" aria-label="太陽系の形をした時計"></canvas></div>
   <div class="time" id="time"><span class="label" id="timeLabel" hidden></span><span id="timeValue">--:--:--</span></div>
-  <button class="pill glass chip" id="taskChip" type="button"><span class="k">タスク</span><span class="sw" id="taskChipSw"></span><b id="taskChipName">なし</b></button>
+  <div class="chip-wrap">
+    <button class="pill glass chip" id="taskChip" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="taskMenu"><span class="k">タスク</span><span class="sw" id="taskChipSw"></span><b id="taskChipName">なし</b><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
+    <div class="menu glass" id="taskMenu" role="listbox" aria-label="タスクを選ぶ" hidden></div>
+  </div>
   <div class="controls">
     <button id="pomo" class="pill glass solid" type="button" aria-pressed="false">ポモドーロ</button>
     <button id="remain" class="pill glass" type="button" hidden>残り時間を隠す</button>
@@ -375,8 +417,14 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
       <input id="taskInput" type="text" maxlength="40" placeholder="新しいタスク" aria-label="新しいタスクの名前">
       <button class="pill primary" type="submit">追加</button>
     </form>
-    <ul class="task-list glass" id="taskList"></ul>
-    <p class="hint">選んだタスクに、ホームのポモドーロで作業した時間が記録されます。ポモドーロの途中で切り替えると、そこから先の時間が新しいタスクに入ります。</p>
+    <div class="card glass list-card">
+      <div class="card-head">
+        <h2>タスク一覧</h2>
+        <button class="pill glass" id="editMode" type="button" aria-pressed="false">編集</button>
+      </div>
+      <ul class="task-list" id="taskList"></ul>
+    </div>
+    <p class="hint">選んだタスクに、ホームのポモドーロで作業した時間が記録されます。ポモドーロの途中で切り替えると、そこから先の時間が新しいタスクに入ります。名前の変更と削除は「編集」から行えます。</p>
   </div>
 </section>
 
@@ -618,7 +666,36 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
     save();
     applyHome();
   });
-  $('taskChip').addEventListener('click', () => show('tasks'));
+  // ホームのタスク切り替え（ドロップダウン）
+  const chip = $('taskChip'), menu = $('taskMenu');
+  function openMenu() {
+    const rows = [{ id: null, name: 'タスクなし' }, ...data.tasks.filter(t => !t.deleted)];
+    menu.innerHTML = rows.map(t => {
+      const on = (data.current ?? null) === t.id;
+      return `<button type="button" role="option" aria-selected="${on}" data-id="${t.id ?? ''}">` +
+        `<span class="sw" style="background:${shadeOf(data, t.id)}"></span><span class="nm">${esc(t.name)}</span>` +
+        (on ? '<svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : '') + '</button>';
+    }).join('') + '<hr><button type="button" class="manage" data-manage="1">タスクを追加・編集…</button>';
+    menu.hidden = false;
+    chip.setAttribute('aria-expanded', 'true');
+    const cur = menu.querySelector('[aria-selected="true"]');
+    if (cur) cur.focus({ preventScroll: true });
+  }
+  function closeMenu() {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    chip.setAttribute('aria-expanded', 'false');
+  }
+  chip.addEventListener('click', () => menu.hidden ? openMenu() : closeMenu());
+  menu.addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    closeMenu();
+    if (b.dataset.manage) { show('tasks'); return; }
+    selectTask(b.dataset.id || null);
+    chip.focus({ preventScroll: true });
+  });
+  document.addEventListener('pointerdown', ev => { if (!menu.hidden && !ev.target.closest('.chip-wrap')) closeMenu(); });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeMenu(); });
 
   // ---------- 背景（ガラス越しに透ける軌道と星座。カレンダーとタスクのページだけ） ----------
   const sky = $('sky'), sctx = sky.getContext('2d');
@@ -861,7 +938,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
     $('xlabels').innerHTML = ents.map(e => `<span class="${e.sel ? 'sel' : ''}">${range === 'week' ? `${e.label}<br>${e.sub}` : e.label}</span>`).join('');
     $('chart').onclick = ev => {
       const b = ev.target.closest('.bar-col'); if (!b) return;
-      sel = new Date(ents[+b.dataset.i].date); renderCalendar();
+      sel = new Date(ents[+b.dataset.i].date); renderCalendar(); showDayCard();
     };
     // 合計と、今日までの日数で割った1日平均
     const total = ents.reduce((s, e) => s + e.total, 0);
@@ -907,7 +984,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
   }
 
   function renderDay(src) {
-    $('dayTitle').textContent = `${sel.getMonth() + 1}月${sel.getDate()}日（${WEEK[sel.getDay()]}）`;
+    $('dayTitle').textContent = `${sameDay(sel, todayStart()) ? '今日　' : ''}${sel.getMonth() + 1}月${sel.getDate()}日（${WEEK[sel.getDay()]}）`;
     const rec = idx.get(dayKey(sel));
     $('dayTotal').innerHTML = fmtLong(valOf(rec));
     const dayStart = sel.getTime(), span = 864e5;
@@ -926,6 +1003,10 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
       : '<li><span class="none">この日の作業記録はありません</span></li>';
   }
 
+  function showDayCard() {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    $('dayCard').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
   function renderCalendar() {
     const src = source();
     idx = buildIndex(src);
@@ -955,7 +1036,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
   $('calNext').addEventListener('click', () => shift('month', 1));
   $('calGrid').addEventListener('click', ev => {
     const b = ev.target.closest('.day'); if (!b) return;
-    sel = new Date(sel.getFullYear(), sel.getMonth(), +b.dataset.d); renderCalendar();
+    sel = new Date(sel.getFullYear(), sel.getMonth(), +b.dataset.d); renderCalendar(); showDayCard();
   });
   $('filters').addEventListener('click', ev => {
     const b = ev.target.closest('[data-f]'); if (!b) return;
@@ -965,34 +1046,40 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
   $('demoOff').addEventListener('click', () => { demo = null; filter = 'all'; renderCalendar(); });
 
   // ---------- タスク ----------
-  let confirmId = null, editId = null;
+  // ふだんはタップで選ぶだけ。「編集」を押すと、名前の書き換えと削除ができる
+  let editing = false, confirmId = null;
+  const editBtn = $('editMode');
   function renderTasks() {
+    editBtn.textContent = editing ? '完了' : '編集';
+    editBtn.setAttribute('aria-pressed', editing);
+    const live = data.tasks.filter(t => !t.deleted);
+    editBtn.hidden = !live.length && !editing;
+    if (editing) {
+      $('taskList').innerHTML = live.length ? live.map(t => {
+        const conf = confirmId === t.id ? `
+          <div class="confirm"><span>「${esc(t.name)}」を削除しますか？ これまでの作業記録は統計に残ります。</span>
+            <button class="pill primary" type="button" data-act="yes">削除する</button>
+            <button class="pill glass" type="button" data-act="no">やめる</button></div>` : '';
+        return `<li class="task-row editing" data-id="${t.id}">
+          <span class="sw" style="background:${shadeOf(data, t.id)}"></span>
+          <input class="name-input" value="${esc(t.name)}" maxlength="40" data-edit="${t.id}" aria-label="「${esc(t.name)}」の名前">
+          <button class="pill del-btn" type="button" data-act="del" aria-label="「${esc(t.name)}」を削除">削除</button>${conf}</li>`;
+      }).join('') : '<li class="task-empty">編集できるタスクがありません</li>';
+      return;
+    }
     const ix = buildIndex(data), today = ix.get(dayKey(new Date()));
     const totals = new Map();
     ix.forEach(rec => rec.by.forEach((v, k) => totals.set(k, (totals.get(k) || 0) + v)));
-    const rows = [{ id: null, name: 'タスクなし' }, ...data.tasks.filter(t => !t.deleted)];
-    $('taskList').innerHTML = rows.map(t => {
+    $('taskList').innerHTML = [{ id: null, name: 'タスクなし' }, ...live].map(t => {
       const isSel = (data.current ?? null) === t.id;
       const meta = `今日 ${fmtPlain(today ? today.by.get(t.id) || 0 : 0)}・合計 ${fmtPlain(totals.get(t.id) || 0)}`;
-      const nameHtml = editId === t.id && t.id
-        ? `<input value="${esc(t.name)}" maxlength="40" data-edit="${t.id}" aria-label="タスク名">`
-        : `<span>${esc(t.name)}</span>`;
-      const tools = t.id ? `
-        <button class="icon-btn" type="button" data-act="edit" aria-label="「${esc(t.name)}」の名前を変更"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg></button>
-        <button class="icon-btn" type="button" data-act="del" aria-label="「${esc(t.name)}」を削除"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>` : '<span></span><span></span>';
-      const conf = confirmId === t.id && t.id ? `
-        <div class="confirm"><span>「${esc(t.name)}」を削除しますか？ これまでの作業記録は統計に残ります。</span>
-          <button class="pill primary" type="button" data-act="yes">削除する</button>
-          <button class="pill glass" type="button" data-act="no">やめる</button></div>` : '';
       return `<li class="task-row${isSel ? ' sel' : ''}" data-id="${t.id ?? ''}">
         <button class="pick" type="button" data-act="pick" aria-pressed="${isSel}">
           <span class="radio"></span>
-          <span class="tname"><span class="sw" style="background:${shadeOf(data, t.id)}"></span>${nameHtml}</span>
+          <span class="tname"><span class="sw" style="background:${shadeOf(data, t.id)}"></span><span>${esc(t.name)}</span></span>
           <span class="tmeta">${meta}</span>
-        </button>${tools}${conf}</li>`;
+        </button></li>`;
     }).join('');
-    const inp = $('taskList').querySelector('[data-edit]');
-    if (inp) { inp.focus(); inp.select(); }
   }
   function selectTask(id) {
     if ((data.current ?? null) === id) return;
@@ -1001,32 +1088,39 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
     if (s) s.sw.push([Date.now(), id]); // ポモドーロ中なら、ここから先を新しいタスクに記録
     save(); applyHome();
   }
-  function commitEdit(input) {
+  function rename(input) {
     const t = data.tasks.find(x => x.id === input.dataset.edit);
     const v = input.value.trim();
-    if (t && v) t.name = v;
-    editId = null; save(); applyHome(); renderTasks();
+    if (!t) return;
+    if (v && v !== t.name) { t.name = v; save(); applyHome(); }
+    else input.value = t.name; // 空にしたときは元の名前に戻す
   }
+  editBtn.addEventListener('click', () => {
+    if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.edit) rename(document.activeElement);
+    editing = !editing; confirmId = null;
+    renderTasks();
+  });
   $('taskList').addEventListener('click', ev => {
     const b = ev.target.closest('[data-act]'); if (!b) return;
-    const row = b.closest('.task-row'), id = row.dataset.id || null, act = b.dataset.act;
-    if (act === 'pick') { if (editId) return; selectTask(id); confirmId = null; }
-    else if (act === 'edit') { editId = id; confirmId = null; }
-    else if (act === 'del') { confirmId = confirmId === id ? null : id; editId = null; }
+    const id = b.closest('.task-row').dataset.id || null, act = b.dataset.act;
+    if (act === 'pick') { selectTask(id); renderTasks(); return; }
+    if (act === 'del') confirmId = confirmId === id ? null : id;
     else if (act === 'no') confirmId = null;
     else if (act === 'yes') {
       const t = data.tasks.find(x => x.id === id);
       if (t) t.deleted = true;
       if (data.current === id) selectTask(null);
       confirmId = null; save(); applyHome();
+      if (!data.tasks.some(x => !x.deleted)) editing = false;
     }
+    // 入力中の名前を消さないよう、書き換え中の値を先に保存してから描き直す
+    $('taskList').querySelectorAll('[data-edit]').forEach(rename);
     renderTasks();
   });
+  $('taskList').addEventListener('change', ev => { if (ev.target.dataset.edit) rename(ev.target); });
   $('taskList').addEventListener('keydown', ev => {
-    if (ev.target.dataset.edit && ev.key === 'Enter') { ev.preventDefault(); commitEdit(ev.target); }
-    if (ev.target.dataset.edit && ev.key === 'Escape') { editId = null; renderTasks(); }
+    if (ev.target.dataset.edit && ev.key === 'Enter') { ev.preventDefault(); ev.target.blur(); }
   });
-  $('taskList').addEventListener('focusout', ev => { if (ev.target.dataset && ev.target.dataset.edit && editId) commitEdit(ev.target); });
   $('taskForm').addEventListener('submit', ev => {
     ev.preventDefault();
     const v = $('taskInput').value.trim();
@@ -1051,6 +1145,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
   }
   function show(p) {
     if (!PAGES.includes(p)) p = 'home';
+    closeMenu();
     const changed = p !== page;
     page = p;
     PAGES.forEach(x => { $('page-' + x).hidden = x !== p; });
@@ -1058,7 +1153,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
     document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === p));
     placeLens(changed);
     if (p === 'calendar') renderCalendar();
-    if (p === 'tasks') { editId = null; confirmId = null; renderTasks(); }
+    if (p === 'tasks') { editing = false; confirmId = null; renderTasks(); }
     if (p === 'home') resizeClock();
     try { history.replaceState(null, '', '#' + p); } catch (e) {}
     window.scrollTo(0, 0);
@@ -1070,7 +1165,7 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
   setInterval(() => {
     if (!activeSession()) return;
     if (page === 'calendar') renderCalendar();
-    if (page === 'tasks' && !editId) renderTasks();
+    if (page === 'tasks' && !editing) renderTasks();
   }, 30000);
 
   function frame() {
