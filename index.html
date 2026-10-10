@@ -809,6 +809,8 @@ button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outl
       fr = [s / 60, m / 60, h / 12];
       showText('', `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`);
     }
+    // 「数字を隠す」は時計モードのデジタル時刻にも効かせる。場所は空けたまま（レイアウトを動かさない）
+    timeValue.style.visibility = !st && !showNums ? 'hidden' : '';
 
     ctx.clearRect(0, 0, W, W);
     ctx.lineCap = 'round';
