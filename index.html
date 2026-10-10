@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>太陽系時計</title>
+<meta name="description" content="太陽系の形をした時計とポモドーロ、作業時間の記録">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="太陽系時計">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0c0c" media="(prefers-color-scheme: dark)">
+<style>:root{padding-top:env(safe-area-inset-top,0px)}body{overscroll-behavior-y:none}</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500&family=JetBrains+Mono:wght@300;400&display=swap">
+<style>
+/* Layout: 3ページ（カレンダー／ホーム／タスク）。下に浮かぶガラスのタブバー。
+   インクと紙の二色に、すりガラスの面を重ねる。後ろには薄い軌道と星座が透ける。 */
+:root {
+  --bg: #f4f4f2;
+  --fg: #161616;
+  --mid: #8c8c88;
+  --faint: #d6d6d2;
+  --track: #e4e4e0;
+  /* タスクの塗り分け（濃い順）と「タスクなし」 */
+  --t0: #161616; --t1: #4d4d49; --t2: #807f7a; --t3: #aeada7; --tn: #cfcec8;
+  /* ガラス */
+  --glass: rgba(255, 255, 255, .42);
+  --glass-edge: rgba(255, 255, 255, .75);
+  --glass-hi: rgba(255, 255, 255, .95);
+  --glass-lo: rgba(0, 0, 0, .06);
+  --glass-shadow: rgba(30, 30, 25, .14);
+  --sheen: linear-gradient(160deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 40%);
+  --lens: rgba(255, 255, 255, .8);
+  --seg: rgba(0, 0, 0, .05);
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --tab-space: calc(100px + env(safe-area-inset-bottom, 0px));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0c0c; --fg: #eeeeea; --mid: #7a7a76; --faint: #2a2a28; --track: #222220;
+    --t0: #eeeeea; --t1: #b9b9b4; --t2: #85857f; --t3: #5c5c58; --tn: #43433f;
+    --glass: rgba(38, 38, 36, .4); --glass-edge: rgba(255, 255, 255, .14); --glass-hi: rgba(255, 255, 255, .2);
+    --glass-lo: rgba(0, 0, 0, .5); --glass-shadow: rgba(0, 0, 0, .55);
+    --sheen: linear-gradient(160deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 42%);
+    --lens: rgba(255, 255, 255, .13); --seg: rgba(255, 255, 255, .06);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0c0c; --fg: #eeeeea; --mid: #7a7a76; --faint: #2a2a28; --track: #222220;
+  --t0: #eeeeea; --t1: #b9b9b4; --t2: #85857f; --t3: #5c5c58; --tn: #43433f;
+  --glass: rgba(38, 38, 36, .4); --glass-edge: rgba(255, 255, 255, .14); --glass-hi: rgba(255, 255, 255, .2);
+  --glass-lo: rgba(0, 0, 0, .5); --glass-shadow: rgba(0, 0, 0, .55);
+  --sheen: linear-gradient(160deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 42%);
+  --lens: rgba(255, 255, 255, .13); --seg: rgba(255, 255, 255, .06);
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .3s, color .3s;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; }
+button:focus-visible, input:focus-visible { outline: 1.5px solid var(--fg); outline-offset: 2px; }
+
+#sky { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+
+.page {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  padding-block: 16px var(--tab-space);
+}
+.page-head h1 {
+  font-size: 1.45rem;
+  font-weight: 500;
+  letter-spacing: .14em;
+  margin: 10px 4px 16px;
+}
+.stack { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------- ガラス ---------- */
+.glass {
+  background: var(--sheen), var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 1px var(--glass-lo), 0 14px 34px -10px var(--glass-shadow);
+}
+.card { border-radius: 26px; padding: 16px; min-width: 0; }
+.pill {
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: .8rem;
+  letter-spacing: .06em;
+  cursor: pointer;
+  transition: transform .35s cubic-bezier(.3, 1.6, .5, 1), background-color .2s, color .2s;
+}
+.pill:active, .icon-btn:active, .day:active, .bar-col:active, .pick:active { transform: scale(.94); }
+.pill.solid[aria-pressed="true"], .pill.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); box-shadow: 0 10px 24px -10px var(--glass-shadow); }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: none; display: grid; place-items: center; cursor: pointer;
+  transition: transform .35s cubic-bezier(.3, 1.6, .5, 1), background-color .2s;
+}
+.icon-btn:hover { background: var(--seg); }
+.icon-btn svg, .tab svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn svg { width: 18px; height: 18px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+/* ---------- タブバー ---------- */
+.tabbar {
+  position: fixed; z-index: 10;
+  left: 50%; transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  width: min(calc(100% - 32px), 360px);
+  height: 64px;
+  border-radius: 999px;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  user-select: none; -webkit-user-select: none;
+}
+.lens {
+  position: absolute; top: 5px; bottom: 5px; left: 0;
+  border-radius: 999px;
+  background: var(--lens);
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 4px 12px -4px var(--glass-shadow);
+  transition: transform .6s cubic-bezier(.3, 1.45, .45, 1), width .3s;
+}
+.lens.stretch { animation: stretch .5s ease; }
+@keyframes stretch { 35% { scale: 1.22 .88; } 70% { scale: .96 1.04; } }
+.tab {
+  position: relative; z-index: 1;
+  border: 0; background: none; border-radius: 999px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: .66rem; letter-spacing: .08em; color: var(--mid);
+  transition: color .25s;
+}
+.tab[aria-selected="true"] { color: var(--fg); }
+.tab svg { width: 22px; height: 22px; }
+
+/* ---------- ホーム ---------- */
+.home {
+  max-width: none;
+  min-height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px;
+}
+.disc {
+  width: min(100%, calc(100vh - 300px), 680px);
+  width: min(100%, calc(100svh - 300px), 680px);
+  max-width: 100%;
+  aspect-ratio: 1;
+}
+.disc canvas { width: 100%; height: 100%; display: block; }
+.time {
+  display: flex; align-items: baseline; gap: .6em; min-height: 1em;
+  font-family: var(--font-mono); font-weight: 300; font-size: 2rem;
+  letter-spacing: .06em; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.time .label { font-family: var(--font-body); font-weight: 500; font-size: 1.05rem; letter-spacing: .14em; }
+.chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
+.chip .k { color: var(--mid); }
+.chip b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+/* ---------- カレンダー ---------- */
+.filters { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 4px; scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.filters .pill { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; padding: 7px 14px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.card-head h2 { font-size: .95rem; font-weight: 500; letter-spacing: .1em; margin: 0; }
+.seg { display: inline-grid; grid-auto-flow: column; border-radius: 999px; padding: 3px; background: var(--seg); }
+.seg button {
+  border: 0; background: none; border-radius: 999px; padding: 5px 14px;
+  font-size: .78rem; color: var(--mid); cursor: pointer; transition: background-color .25s, color .25s;
+}
+.seg button[aria-selected="true"] { background: var(--lens); color: var(--fg); box-shadow: inset 0 1px 0 var(--glass-hi), 0 2px 8px -3px var(--glass-shadow); }
+.nav-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.nav-row .title { font-size: .9rem; letter-spacing: .06em; text-align: center; }
+.stats { display: flex; gap: 26px; margin: 8px 4px 14px; }
+.stat span { display: block; font-size: .68rem; color: var(--mid); letter-spacing: .12em; margin-bottom: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 400; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.stat small { font-family: var(--font-body); font-size: .72rem; margin-left: 1px; }
+
+.chart { position: relative; height: 150px; display: flex; align-items: flex-end; padding-right: 44px; border-bottom: 1px solid var(--faint); }
+.grid-line { position: absolute; left: 0; right: 44px; border-top: 1px dashed var(--faint); }
+.grid-line span {
+  position: absolute; right: -44px; width: 40px; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: .6rem; color: var(--mid); text-align: right;
+}
+.bar-col {
+  flex: 1; min-width: 0; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  border: 0; background: none; padding: 0 1px; cursor: pointer;
+  transition: transform .35s cubic-bezier(.3, 1.6, .5, 1);
+}
+.bar-stack { width: 100%; max-width: 26px; display: flex; flex-direction: column-reverse; border-radius: 5px 5px 1px 1px; overflow: hidden; }
+.bar-stack i { display: block; flex: none; }
+.bar-col.sel .bar-stack { box-shadow: 0 0 0 1.5px var(--bg), 0 0 0 3px var(--fg); }
+.xlabels { display: flex; padding-right: 44px; margin-top: 6px; }
+.xlabels span { flex: 1; min-width: 0; text-align: center; font-family: var(--font-mono); font-size: .6rem; color: var(--mid); white-space: nowrap; overflow: visible; }
+.xlabels span.sel { color: var(--fg); }
+
+.cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal-week span { text-align: center; font-size: .66rem; color: var(--mid); padding-bottom: 4px; letter-spacing: .1em; }
+.day {
+  border: 0; background: none; border-radius: 14px;
+  padding: 6px 0 5px; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
+  transition: transform .35s cubic-bezier(.3, 1.6, .5, 1), background-color .2s;
+}
+.day .num { font-family: var(--font-mono); font-size: .72rem; line-height: 1; }
+.day .pie { width: 28px; height: 28px; border-radius: 50%; }
+.day .pie.empty { box-shadow: inset 0 0 0 1px var(--faint); }
+.day .tm { font-family: var(--font-mono); font-size: .58rem; color: var(--mid); min-height: 1em; line-height: 1; font-variant-numeric: tabular-nums; }
+.day.today .num { font-weight: 400; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+.day.sel { background: var(--lens); box-shadow: inset 0 1px 0 var(--glass-hi), 0 3px 10px -4px var(--glass-shadow); }
+.day.future { opacity: .35; }
+
+.band { position: relative; height: 30px; border-radius: 10px; background: var(--track); overflow: hidden; }
+.band i { position: absolute; top: 0; bottom: 0; min-width: 1px; }
+.band .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--fg); }
+.axis { position: relative; height: 1.2em; margin-top: 6px; font-family: var(--font-mono); font-size: .6rem; color: var(--mid); }
+.axis span { position: absolute; transform: translateX(-50%); }
+.axis span:first-child { transform: none; }
+.axis span:last-child { transform: translateX(-100%); }
+.day-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.day-list li {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 9px 2px; border-top: 1px solid var(--faint); font-size: .82rem;
+}
+.day-list time, .day-list .dur { font-family: var(--font-mono); font-size: .76rem; font-variant-numeric: tabular-nums; }
+.day-list .dur { color: var(--mid); }
+.day-list .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-list .none { display: block; color: var(--mid); font-size: .8rem; }
+.empty-card p { margin: 0 0 12px; font-size: .84rem; line-height: 1.8; color: var(--mid); }
+.empty-card h2 { font-size: .95rem; font-weight: 500; letter-spacing: .08em; margin: 0 0 6px; }
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 999px; padding: 6px 6px 6px 18px; font-size: .8rem; }
+
+/* ---------- タスク ---------- */
+.add { display: flex; gap: 6px; padding: 6px; border-radius: 999px; }
+.add input {
+  flex: 1; min-width: 0; border: 0; background: none; outline: none;
+  font: inherit; font-size: 16px; color: var(--fg); padding: 8px 12px;
+}
+.add input::placeholder { color: var(--mid); }
+.hint { font-size: .75rem; color: var(--mid); margin: 2px 8px 0; line-height: 1.8; }
+.task-list { list-style: none; margin: 0; padding: 6px; border-radius: 26px; }
+.task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 2px; border-radius: 20px; padding: 2px 4px; transition: background-color .25s; }
+.task-row + .task-row { margin-top: 2px; }
+.task-row.sel { background: var(--lens); box-shadow: inset 0 1px 0 var(--glass-hi); }
+.pick {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 12px; row-gap: 2px;
+  text-align: left; border: 0; background: none; padding: 10px 6px; cursor: pointer; min-width: 0;
+  transition: transform .35s cubic-bezier(.3, 1.6, .5, 1);
+}
+.radio { grid-row: span 2; align-self: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--mid); display: grid; place-items: center; }
+.sel .radio { border-color: var(--fg); }
+.sel .radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--fg); }
+.tname { display: flex; align-items: center; gap: 8px; font-size: .95rem; min-width: 0; }
+.tname span { overflow-wrap: anywhere; }
+.tmeta { font-size: .72rem; color: var(--mid); font-variant-numeric: tabular-nums; }
+.tname input { font: inherit; font-size: 16px; color: var(--fg); background: var(--seg); border: 0; border-radius: 10px; padding: 4px 8px; width: 100%; min-width: 0; outline: none; }
+.confirm { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 8px 10px 40px; font-size: .8rem; }
+.confirm span { flex: 1 1 100%; color: var(--mid); line-height: 1.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  body, .lens, .pill, .icon-btn, .day, .bar-col, .pick { transition: none; }
+  .lens.stretch { animation: none; }
+}
+</style>
+
+<canvas id="sky" aria-hidden="true"></canvas>
+
+<!-- カレンダー -->
+<section class="page" id="page-calendar" hidden>
+  <header class="page-head"><h1>カレンダー</h1></header>
+  <div class="stack">
+    <div class="filters" id="filters" role="group" aria-label="タスクで絞り込む"></div>
+    <div class="banner glass" id="demoBanner" hidden>
+      <span>サンプルデータを表示しています</span>
+      <button class="pill glass" id="demoOff" type="button">終了</button>
+    </div>
+    <article class="card glass empty-card" id="emptyCard" hidden>
+      <h2>まだ記録がありません</h2>
+      <p>ホームでポモドーロを始めると、作業した時間がここに貯まります。どんな画面になるか先に見たいときは、サンプルデータで表示できます。</p>
+      <button class="pill primary" id="demoOn" type="button">サンプルで見る</button>
+    </article>
+
+    <article class="card glass">
+      <div class="card-head">
+        <h2>作業時間</h2>
+        <div class="seg" role="tablist" aria-label="期間">
+          <button role="tab" data-range="week" aria-selected="true" type="button">週</button>
+          <button role="tab" data-range="month" aria-selected="false" type="button">月</button>
+          <button role="tab" data-range="year" aria-selected="false" type="button">年</button>
+        </div>
+      </div>
+      <div class="nav-row">
+        <button class="icon-btn" id="barPrev" type="button" aria-label="前へ"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <span class="title" id="barTitle"></span>
+        <button class="icon-btn" id="barNext" type="button" aria-label="次へ"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>合計</span><b id="barTotal">0</b></div>
+        <div class="stat"><span>1日平均</span><b id="barAvg">0</b></div>
+      </div>
+      <div class="chart" id="chart"></div>
+      <div class="xlabels" id="xlabels"></div>
+    </article>
+
+    <article class="card glass">
+      <div class="nav-row card-head">
+        <button class="icon-btn" id="calPrev" type="button" aria-label="前の月"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h2 id="calTitle"></h2>
+        <button class="icon-btn" id="calNext" type="button" aria-label="次の月"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="cal-week"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </article>
+
+    <article class="card glass">
+      <div class="card-head">
+        <h2 id="dayTitle"></h2>
+        <div class="stat"><b id="dayTotal"></b></div>
+      </div>
+      <div class="band" id="band"></div>
+      <div class="axis"><span style="left:0">0</span><span style="left:25%">6</span><span style="left:50%">12</span><span style="left:75%">18</span><span style="left:100%">24</span></div>
+      <ul class="day-list" id="dayList"></ul>
+    </article>
+  </div>
+</section>
+
+<!-- ホーム -->
+<section class="page home" id="page-home">
+  <div class="disc" id="disc"><canvas id="cv" aria-label="太陽系の形をした時計"></canvas></div>
+  <div class="time" id="time"><span class="label" id="timeLabel" hidden></span><span id="timeValue">--:--:--</span></div>
+  <button class="pill glass chip" id="taskChip" type="button"><span class="k">タスク</span><span class="sw" id="taskChipSw"></span><b id="taskChipName">なし</b></button>
+  <div class="controls">
+    <button id="pomo" class="pill glass solid" type="button" aria-pressed="false">ポモドーロ</button>
+    <button id="remain" class="pill glass" type="button" hidden>残り時間を隠す</button>
+    <button id="nums" class="pill glass" type="button" aria-pressed="true">数字を隠す</button>
+    <button id="theme" class="pill glass" type="button">ダーク</button>
+  </div>
+</section>
+
+<!-- タスク -->
+<section class="page" id="page-tasks" hidden>
+  <header class="page-head"><h1>タスク</h1></header>
+  <div class="stack">
+    <form class="add glass" id="taskForm" autocomplete="off">
+      <input id="taskInput" type="text" maxlength="40" placeholder="新しいタスク" aria-label="新しいタスクの名前">
+      <button class="pill primary" type="submit">追加</button>
+    </form>
+    <ul class="task-list glass" id="taskList"></ul>
+    <p class="hint">選んだタスクに、ホームのポモドーロで作業した時間が記録されます。ポモドーロの途中で切り替えると、そこから先の時間が新しいタスクに入ります。</p>
+  </div>
+</section>
+
+<nav class="tabbar glass" role="tablist" aria-label="ページ">
+  <span class="lens" id="lens" aria-hidden="true"></span>
+  <button class="tab" role="tab" data-tab="calendar" type="button" aria-selected="false">
+    <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>カレンダー
+  </button>
+  <button class="tab" role="tab" data-tab="home" type="button" aria-selected="true">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2"/><circle cx="12" cy="12" r="8.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>ホーム
+  </button>
+  <button class="tab" role="tab" data-tab="tasks" type="button" aria-selected="false">
+    <svg viewBox="0 0 24 24"><path d="M4 7l2 2 3.5-4M4 16l2 2 3.5-4M13 7.5h7M13 16.5h7"/></svg>タスク
+  </button>
+</nav>
+
+<script>
+(() => {
+  'use strict';
+  const TAU = Math.PI * 2;
+  const root = document.documentElement;
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const WEEK = '日月火水木金土';
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+
+  // ---------- 黄道12星座 ----------
+  // 星座線: Stellarium「modern」スカイカルチャー / 星の座標と等級: HYG星表 v4.1（ヒッパルコス番号で対応）
+  // s: [赤経(h), 赤緯(°), 等級]、l: 結ぶ星の順番。並びはおひつじ座〜うお座（黄道の順）
+  const ZODIAC = [{"id":"Ari","s":[[2.8331,27.261,3.61],[2.1196,23.462,2.01],[1.9107,20.808,2.64],[1.8922,19.294,3.88]],"l":[[0,1,2,3]]},{"id":"Tau","s":[[5.4382,28.607,1.65],[4.7041,22.957,4.27],[4.4769,19.18,3.53],[4.5987,16.509,0.87],[5.6274,21.143,2.97],[4.3299,15.628,3.65],[4.3822,17.543,3.77],[4.0113,12.49,3.41],[3.4136,9.029,3.61],[4.4777,15.871,3.4],[4.4248,17.928,4.3],[3.8194,24.053,3.62]],"l":[[0,1,2],[3,4],[5,6],[5,7,8],[3,2],[3,9,5],[2,10,6,11]]},{"id":"Gem","s":[[6.6285,16.399,1.93],[7.0685,20.57,4.01],[7.3354,21.982,3.5],[7.3015,16.54,3.58],[6.7548,12.896,3.35],[7.5987,26.896,4.06],[7.7408,24.398,3.57],[7.7553,28.026,1.16],[7.4288,27.798,3.78],[7.1857,30.245,4.41],[7.5766,31.888,1.58],[6.8798,33.961,3.6],[6.7322,25.131,3.06],[6.4827,20.212,4.13],[6.3827,22.514,2.87],[6.248,22.507,3.31],[6.0687,23.263,4.16]],"l":[[0,1,2,3,4],[2,5,6],[5,7],[5,8,9,10],[9,11],[9,12,13],[12,14,15,16]]},{"id":"Cnc","s":[[8.7783,28.76,4.03],[8.7214,21.469,4.66],[8.3344,27.218,5.13],[8.7447,18.154,3.94],[8.2753,9.186,3.53],[8.9748,11.858,4.26]],"l":[[0,1,2],[1,3,4],[3,5]]},{"id":"Leo","s":[[11.8177,14.572,2.14],[11.2373,15.43,3.33],[10.1395,11.967,1.36],[10.1222,16.763,3.48],[10.3329,19.841,2.01],[11.2351,20.524,2.56],[10.2782,23.417,3.43],[9.8794,26.007,3.88],[9.7642,23.774,2.97]],"l":[[0,1,2,3,4,5,0],[4,6,7,8],[5,1]]},{"id":"Vir","s":[[11.7643,6.529,4.04],[12.3318,-0.667,3.89],[12.6943,-1.449,2.74],[13.4199,-11.161,0.98],[14.2149,-10.274,4.18],[14.2669,-6.001,4.07],[14.7177,-5.658,3.87],[13.5782,-0.596,3.38],[14.0274,1.545,4.23],[14.7708,1.893,3.73],[12.9267,3.397,3.39],[13.0363,10.959,2.85]],"l":[[0,1,2,3,4,5,6],[3,7,8,9],[7,10,11],[10,2]]},{"id":"Lib","s":[[15.8971,-16.729,4.13],[15.5921,-14.79,3.91],[15.2834,-9.383,2.61],[14.848,-16.042,2.75],[15.0678,-25.282,3.25]],"l":[[0,1,2,3,4,1]]},{"id":"Sco","s":[[17.5601,-37.104,1.62],[17.7081,-39.03,2.39],[17.7931,-40.127,2.99],[17.622,-42.998,1.86],[17.2026,-43.239,3.32],[16.8999,-42.362,4.7],[16.8645,-38.047,3.0],[16.8361,-34.293,2.29],[16.598,-28.216,2.82],[16.4901,-26.432,1.06],[16.0056,-22.622,2.29],[15.9809,-26.114,2.89],[16.0906,-19.805,2.56]],"l":[[0,1,2,3,4,5,6,7,8,9,10],[9,11],[9,12]]},{"id":"Sgr","s":[[18.3499,-29.828,2.72],[18.4662,-25.422,2.82],[18.2938,-36.762,3.1],[18.4029,-34.385,1.79],[18.0968,-30.424,2.98],[17.7927,-27.831,4.53],[19.0435,-29.88,2.6],[18.7609,-26.991,3.17],[18.2294,-21.059,3.84],[19.1157,-27.67,3.32],[18.9211,-26.297,2.05],[18.9622,-21.107,3.52],[19.0781,-21.741,3.76],[19.2939,-18.953,4.88],[19.3612,-17.847,3.92],[19.6005,-24.719,5.64],[20.0443,-27.71,4.43],[19.9956,-35.276,4.37],[19.921,-41.868,4.12],[19.3981,-40.616,3.96],[19.387,-44.8,4.27]],"l":[[0,1],[2,3,4,5],[4,0,3,6,7,0],[7,1,8],[6,9,10,7],[10,11,12,13,14],[9,15,16,17,18,19],[18,20]]},{"id":"Cap","s":[[20.3009,-12.545,3.58],[20.3502,-14.781,3.05],[21.0991,-17.233,4.08],[21.3708,-16.835,4.28],[21.6682,-16.662,3.69],[21.784,-16.127,2.85],[21.4445,-22.411,3.77],[20.7683,-25.271,4.13],[20.8637,-26.919,4.12]],"l":[[0,1,2,3,4,5],[3,6,2],[1,7],[2,8]]},{"id":"Aqr","s":[[21.526,-5.571,2.9],[22.0964,-0.32,2.95],[22.3609,-1.387,3.86],[22.4805,-0.02,3.65],[22.5893,-0.117,4.04],[22.8769,-7.58,3.73],[23.2649,-9.088,4.24],[23.3828,-20.101,3.96],[22.2806,-7.783,4.17],[22.1073,-13.87,4.29],[22.5108,-10.678,4.82],[22.8265,-13.593,4.05],[22.9108,-15.821,3.27],[23.1574,-21.172,3.68],[20.7946,-9.496,3.78]],"l":[[0,1,2,3,4,5,6,7],[1,8,9],[8,10,11,12,13],[14,0]]},{"id":"Psc","s":[[1.047,31.804,5.5],[1.2292,24.584,4.67],[1.3244,27.264,4.74],[1.5247,15.346,3.62],[1.7566,9.158,4.26],[2.0341,2.764,3.82],[1.8926,3.188,4.61],[1.6905,5.488,4.45],[1.5031,6.144,4.84],[1.0491,7.89,4.27],[0.8048,7.3,5.92],[0.3433,8.19,5.38],[23.9885,6.863,4.03],[23.6658,5.626,4.13],[23.7732,3.487,4.95],[23.7008,1.78,4.49],[23.4489,1.256,4.95],[23.2861,3.282,3.7],[23.3391,5.381,5.05],[23.4661,6.379,4.27]],"l":[[0,1],[0,2,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,13]]}];
+  // 各星座の中心で正射影し、中心0・最大辺1に正規化（北が上、東が左＝見上げた夜空の向き）
+  const D2R = Math.PI / 180;
+  ZODIAC.forEach(z => {
+    let vx = 0, vy = 0, vz = 0;
+    z.s.forEach(([ra, dec]) => {
+      const a = ra * 15 * D2R, d = dec * D2R;
+      vx += Math.cos(d) * Math.cos(a); vy += Math.cos(d) * Math.sin(a); vz += Math.sin(d);
+    });
+    const a0 = Math.atan2(vy, vx), d0 = Math.atan2(vz, Math.hypot(vx, vy));
+    const xy = z.s.map(([ra, dec]) => {
+      const a = ra * 15 * D2R, d = dec * D2R, da = a - a0;
+      return [-Math.cos(d) * Math.sin(da),
+              -(Math.cos(d0) * Math.sin(d) - Math.sin(d0) * Math.cos(d) * Math.cos(da))];
+    });
+    const xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
+    const mx = (Math.min(...xs) + Math.max(...xs)) / 2, my = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const sc = Math.max((Math.max(...xs) - Math.min(...xs)) / 1.35, Math.max(...ys) - Math.min(...ys));
+    z.p = xy.map(([x, y]) => [(x - mx) / sc, (y - my) / sc]);
+    z.r = z.s.map(([, , mag]) => Math.max(.8, 2.7 - .42 * mag));
+  });
+
+  // ---------- ポモドーロの決まり ----------
+  // 1回 = 作業25分 + 休憩5分。12回終えたら別枠で1時間休憩し、1回目から繰り返し。
+  const MIN = 60000;
+  const WORK = 25 * MIN, BREAK = 5 * MIN, LONG = 60 * MIN, ROUND = WORK + BREAK;
+  const CYCLE = 12 * ROUND + LONG;
+  const SLIDE = 1200, BLINK = 2400;
+
+  function pomoState(start, nowMs) {
+    const e = Math.max(0, nowMs - start);
+    const cycleNo = Math.floor(e / CYCLE);
+    const ec = e - cycleNo * CYCLE;
+    if (ec >= 12 * ROUND) {
+      const t = ec - 12 * ROUND;
+      return { r: 12, t, phase: 'long', phaseT: t, phaseLen: LONG, justEnded: t < BLINK };
+    }
+    const r = Math.floor(ec / ROUND), t = ec - r * ROUND;
+    const work = t < WORK;
+    const firstRound = cycleNo === 0 && r === 0;
+    return { r, t, phase: work ? 'work' : 'break', phaseT: work ? t : t - WORK,
+             phaseLen: work ? WORK : BREAK, justEnded: !firstRound && t < BLINK };
+  }
+
+  // ---------- 記録データ（この端末のブラウザ内だけに保存） ----------
+  // tasks: [{id, name, deleted}]、current: 選択中のタスクid（null = タスクなし）
+  // sessions: [{start, end, sw: [[時刻, タスクid], ...]}]  end が null のものが進行中
+  const DATA_KEY = 'solar-clock-data-v1';
+  function loadData() {
+    let d = null;
+    try { d = JSON.parse(store.get(DATA_KEY, 'null')); } catch (e) {}
+    if (!d || !Array.isArray(d.tasks) || !Array.isArray(d.sessions)) d = { tasks: [], current: null, sessions: [] };
+    const old = Number(store.get('solar-clock-pomo', '0')); // 前のバージョンで動いていたポモドーロを引き継ぐ
+    if (old > 0 && old <= Date.now() && !d.sessions.some(s => s.end == null)) d.sessions.push({ start: old, end: null, sw: [[old, null]] });
+    store.del('solar-clock-pomo');
+    return d;
+  }
+  const data = loadData();
+  const save = () => store.set(DATA_KEY, JSON.stringify(data));
+  save();
+  const activeSession = () => { const s = data.sessions[data.sessions.length - 1]; return s && s.end == null ? s : null; };
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  // ---------- 集計 ----------
+  const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  function splitDays(a, b, task, out) {
+    while (a < b) {
+      const d = new Date(a);
+      const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+      const e = Math.min(b, next);
+      out.push({ a, b: e, task, day: dayKey(d) });
+      a = e;
+    }
+  }
+  // セッションから「作業25分」の部分だけを取り出し、タスクの切り替えと日付の境目で分ける
+  function pieces(src, until) {
+    const out = [];
+    for (const s of src.sessions) {
+      const end = Math.min(s.end == null ? until : s.end, until);
+      if (end <= s.start) continue;
+      const sw = s.sw && s.sw.length ? s.sw : [[s.start, null]];
+      for (let base = s.start; base < end; base += CYCLE) {
+        for (let r = 0; r < 12; r++) {
+          const a = base + r * ROUND;
+          if (a >= end) break;
+          const b = Math.min(a + WORK, end);
+          for (let i = 0; i < sw.length; i++) {
+            const ta = Math.max(a, sw[i][0]);
+            const tb = Math.min(b, i + 1 < sw.length ? sw[i + 1][0] : Infinity);
+            if (tb > ta) splitDays(ta, tb, sw[i][1], out);
+          }
+        }
+      }
+    }
+    return out;
+  }
+  function buildIndex(src) {
+    const days = new Map();
+    for (const p of pieces(src, Date.now())) {
+      let d = days.get(p.day);
+      if (!d) days.set(p.day, d = { total: 0, by: new Map(), ps: [] });
+      const ms = p.b - p.a;
+      d.total += ms;
+      d.by.set(p.task, (d.by.get(p.task) || 0) + ms);
+      d.ps.push(p);
+    }
+    return days;
+  }
+
+  const fmtLong = ms => {
+    const m = Math.round(ms / MIN), h = Math.floor(m / 60), r = m % 60;
+    if (h === 0) return `${r}<small>分</small>`;
+    return r ? `${h}<small>時間</small>${r}<small>分</small>` : `${h}<small>時間</small>`;
+  };
+  const fmtPlain = ms => fmtLong(ms).replace(/<\/?small>/g, '');
+  const fmtShort = ms => { const m = Math.round(ms / MIN); return m === 0 ? '' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}:${pad(m % 60)}`; };
+  const fmtClock = t => { const d = new Date(t); return `${d.getHours()}:${pad(d.getMinutes())}`; };
+
+  // ---------- サンプルデータ（保存しない） ----------
+  let demo = null;
+  function makeDemo() {
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const tasks = [{ id: 'd1', name: '卒業論文' }, { id: 'd2', name: '英語' }, { id: 'd3', name: '読書' }];
+    const sessions = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (let k = 200; k >= 0; k--) {
+      if (rnd() < .22) continue;
+      const day = new Date(today); day.setDate(today.getDate() - k);
+      let hour = 8 + rnd() * 3;
+      const n = 1 + Math.floor(rnd() * 3);
+      for (let j = 0; j < n && hour < 22; j++) {
+        const start = day.getTime() + hour * 3600000;
+        const rounds = 1 + Math.floor(rnd() * 5);
+        let end = start + rounds * ROUND - BREAK - rnd() * 6 * MIN;
+        if (end > Date.now()) end = Date.now();
+        if (end <= start) continue;
+        const t1 = tasks[Math.floor(rnd() * 3)].id;
+        const sw = [[start, t1]];
+        if (rounds > 2 && rnd() < .5) sw.push([start + 2 * ROUND, tasks[Math.floor(rnd() * 3)].id]);
+        sessions.push({ start, end, sw });
+        hour += rounds * .5 + 1 + rnd() * 3;
+      }
+    }
+    return { tasks, sessions, current: null };
+  }
+  const source = () => demo || data;
+
+  // タスクの塗り（並び順で濃い色から）
+  function shadeOf(src, id) {
+    if (id == null) return 'var(--tn)';
+    const i = src.tasks.findIndex(t => t.id === id);
+    return i < 0 ? 'var(--tn)' : `var(--t${i % 4})`;
+  }
+  function nameOf(src, id) {
+    if (id == null) return 'タスクなし';
+    const t = src.tasks.find(t => t.id === id);
+    return t ? t.name : '削除したタスク';
+  }
+
+  // ---------- テーマと設定 ----------
+  const themeBtn = $('theme'), numsBtn = $('nums'), pomoBtn = $('pomo'), remainBtn = $('remain');
+  const sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const currentTheme = () => root.dataset.theme || (sysDark.matches ? 'dark' : 'light');
+  let C = {};
+  function readColors() {
+    const s = getComputedStyle(root);
+    C = { fg: s.getPropertyValue('--fg').trim(), mid: s.getPropertyValue('--mid').trim(), faint: s.getPropertyValue('--faint').trim() };
+    themeBtn.textContent = currentTheme() === 'dark' ? 'ライト' : 'ダーク';
+    drawSky();
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    store.set('solar-clock-theme', next);
+    readColors();
+  });
+  const savedTheme = store.get('solar-clock-theme', '');
+  if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
+  sysDark.addEventListener('change', () => { if (!root.dataset.theme) readColors(); });
+
+  let showNums = store.get('solar-clock-nums', 'on') !== 'off';
+  let showRemain = store.get('solar-clock-remain', 'on') !== 'off';
+  numsBtn.addEventListener('click', () => { showNums = !showNums; store.set('solar-clock-nums', showNums ? 'on' : 'off'); applyHome(); });
+  remainBtn.addEventListener('click', () => { showRemain = !showRemain; store.set('solar-clock-remain', showRemain ? 'on' : 'off'); applyHome(); });
+
+  function applyHome() {
+    const on = !!activeSession();
+    pomoBtn.setAttribute('aria-pressed', on);
+    pomoBtn.setAttribute('aria-label', on ? 'ポモドーロを終了' : 'ポモドーロを開始');
+    remainBtn.hidden = !on;
+    numsBtn.hidden = on;
+    numsBtn.textContent = showNums ? '数字を隠す' : '数字を表示';
+    numsBtn.setAttribute('aria-pressed', showNums);
+    remainBtn.textContent = showRemain ? '残り時間を隠す' : '残り時間を表示';
+    remainBtn.setAttribute('aria-pressed', showRemain);
+    $('taskChipName').textContent = nameOf(data, data.current);
+    $('taskChipSw').style.background = shadeOf(data, data.current);
+    lastShown = '';
+  }
+  pomoBtn.addEventListener('click', () => {
+    const s = activeSession(), now = Date.now();
+    if (s) s.end = now;
+    else data.sessions.push({ start: now, end: null, sw: [[now, data.current]] });
+    save();
+    applyHome();
+  });
+  $('taskChip').addEventListener('click', () => show('tasks'));
+
+  // ---------- 背景（ガラス越しに透ける軌道と星座） ----------
+  const sky = $('sky'), sctx = sky.getContext('2d');
+  function drawSky() {
+    const w = innerWidth, h = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
+    sky.width = Math.round(w * dpr); sky.height = Math.round(h * dpr);
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    sctx.clearRect(0, 0, w, h);
+    if (!C.fg) return;
+    const cx = w * .92, cy = h * .12, base = Math.max(w, h);
+    sctx.strokeStyle = C.faint; sctx.lineWidth = 1.2;
+    [.28, .5, .74, 1.0].forEach(k => { sctx.beginPath(); sctx.arc(cx, cy, base * k, 0, TAU); sctx.stroke(); });
+    // 惑星（ぼかすと面の濃淡になる）
+    sctx.fillStyle = C.fg;
+    [[.5, 2.2, .07, .10], [.74, 1.9, .05, .07], [1.0, 1.75, .06, .05]].forEach(([k, a, rr, al]) => {
+      sctx.globalAlpha = al;
+      sctx.beginPath(); sctx.arc(cx + Math.cos(a) * base * k, cy + Math.sin(a) * base * k, Math.min(w, h) * rr, 0, TAU); sctx.fill();
+    });
+    sctx.beginPath(); sctx.globalAlpha = .12; sctx.arc(cx, cy, Math.min(w, h) * .06, 0, TAU); sctx.fill();
+    // 星座をいくつか散らす
+    let seed = 11; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    sctx.strokeStyle = C.mid; sctx.fillStyle = C.mid; sctx.globalAlpha = .55; sctx.lineWidth = .9;
+    for (let i = 0; i < 7; i++) {
+      const z = ZODIAC[(i * 5) % 12];
+      const zx = rnd() * w, zy = rnd() * h, zs = Math.min(w, h) * (.18 + rnd() * .1);
+      const P = z.p.map(([x, y]) => [zx + x * zs, zy + y * zs]);
+      z.l.forEach(ch => { sctx.beginPath(); ch.forEach((n, j) => j ? sctx.lineTo(P[n][0], P[n][1]) : sctx.moveTo(P[n][0], P[n][1])); sctx.stroke(); });
+      P.forEach(([x, y], j) => { sctx.beginPath(); sctx.arc(x, y, z.r[j], 0, TAU); sctx.fill(); });
+    }
+    sctx.globalAlpha = 1;
+  }
+
+  // ---------- 時計 ----------
+  const ORBITS = [.2, .36, .52]; // 秒・分・時の半径（外側から 時・分・秒）
+  const cv = $('cv'), ctx = cv.getContext('2d'), disc = $('disc');
+  let W = 0, S = 0;
+  function resizeClock() {
+    W = disc.getBoundingClientRect().width;
+    if (!W) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = cv.height = Math.round(W * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    S = W / 2;
+  }
+  new ResizeObserver(resizeClock).observe(disc);
+
+  const at = (r, a) => [S + Math.cos(a) * r, S + Math.sin(a) * r];
+  function dot(x, y, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const timeLabel = $('timeLabel'), timeValue = $('timeValue');
+  let lastShown = '';
+  function showText(label, value) {
+    const key = label + '|' + value;
+    if (key === lastShown) return;
+    lastShown = key;
+    timeLabel.textContent = label; timeLabel.hidden = !label;
+    timeValue.textContent = value; timeValue.hidden = !value;
+  }
+  function drawZodiac(visible, highlight) {
+    const ZR = S * .8, ZB = S * .2;
+    ZODIAC.forEach((z, i) => {
+      const k = (i + 3) % 12; // やぎ座が12時〜1時、いて座が11時〜12時の区画
+      if (!visible(k)) return;
+      const a = -Math.PI / 2 + (k + .5) / 12 * TAU;
+      const [cx, cy] = at(ZR, a);
+      const rot = a + Math.PI / 2, cr = Math.cos(rot), sr = Math.sin(rot);
+      const P = z.p.map(([x, y]) => [cx + (x * cr - y * sr) * ZB, cy + (x * sr + y * cr) * ZB]);
+      const on = k === highlight;
+      ctx.strokeStyle = on ? C.fg : C.mid; ctx.lineWidth = on ? 1.1 : .8;
+      ctx.globalAlpha = on ? 1 : .8;
+      z.l.forEach(chain => {
+        ctx.beginPath();
+        chain.forEach((n, j) => j ? ctx.lineTo(P[n][0], P[n][1]) : ctx.moveTo(P[n][0], P[n][1]));
+        ctx.stroke();
+      });
+      P.forEach(([x, y], j) => dot(x, y, z.r[j] * (on ? 1.15 : 1), on ? C.fg : C.mid));
+      ctx.globalAlpha = 1;
+    });
+  }
+  // 飛行機雲：角度 a（点の位置）から後ろ向きに len 周ぶん、だんだん薄く細く
+  function trail(r, a, len) {
+    if (len <= 0) return;
+    const N = 72, step = len * TAU / N;
+    ctx.strokeStyle = C.fg; ctx.lineCap = 'butt';
+    for (let j = 0; j < N; j++) {
+      const fade = Math.pow(1 - j / N, 1.6);
+      ctx.globalAlpha = fade;
+      ctx.lineWidth = .5 + 1.4 * fade;
+      const a1 = a - j * step, a0 = a1 - step * 1.08;
+      ctx.beginPath(); ctx.arc(S, S, r, a0, a1); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.lineCap = 'round';
+  }
+
+  function drawClock() {
+    if (!S) return;
+    const now = new Date();
+    const R = ORBITS.map(o => o * S);
+    const sess = activeSession();
+    const st = sess ? pomoState(sess.start, now.getTime()) : null;
+    let fr;
+    if (st) {
+      fr = [((st.phaseT / 1000) % 60) / 60, st.phaseT / st.phaseLen, null];
+      const label = st.phase === 'work' ? '作業中' : st.phase === 'long' ? '長い休憩' : '休憩中';
+      const left = Math.ceil((st.phaseLen - st.phaseT) / 1000);
+      showText(label, showRemain ? `${pad(Math.floor(left / 60))}:${pad(left % 60)}` : '');
+    } else {
+      const s = now.getSeconds() + now.getMilliseconds() / 1000;
+      const m = now.getMinutes() + s / 60;
+      const h = (now.getHours() % 12) + m / 60;
+      fr = [s / 60, m / 60, h / 12];
+      showText('', `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`);
+    }
+
+    ctx.clearRect(0, 0, W, W);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.faint; ctx.lineWidth = 1;
+    R.forEach(r => { ctx.beginPath(); ctx.arc(S, S, r, 0, TAU); ctx.stroke(); });
+    ctx.beginPath(); ctx.arc(S, S, S * .97, 0, TAU); ctx.stroke();
+    for (let i = 0; i < 12; i++) {
+      const a = -Math.PI / 2 + i / 12 * TAU;
+      const [x1, y1] = at(S * .93, a), [x2, y2] = at(S * .97, a);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+
+    if (!st) drawZodiac(() => true, Math.floor(fr[2] * 12) % 12);
+    else if (st.justEnded) { if (Math.floor(st.t / 400) % 2 === 0) drawZodiac(() => true, -1); }
+    else if (st.phase !== 'work') drawZodiac(() => true, -1);
+    else drawZodiac(k => k < st.r, -1);
+
+    if (!st && showNums) {
+      ctx.fillStyle = C.mid; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `400 ${Math.max(10, S * .042)}px "JetBrains Mono", monospace`;
+      for (let i = 1; i <= 12; i++) {
+        const [x, y] = at(Math.max(...R) + S * .09, -Math.PI / 2 + i / 12 * TAU);
+        ctx.fillText(String(i), x, y);
+      }
+    }
+
+    const TRAIL = .5;
+    for (let i = 0; i < (st ? 2 : 3); i++) {
+      const done = !st ? 1 : i === 0 ? st.phaseT / 60000 : fr[1];
+      trail(R[i], -Math.PI / 2 + fr[i] * TAU, Math.min(TRAIL, done));
+    }
+
+    dot(S, S, S * .05, C.fg);
+    const pr = Math.max(3.5, S * .026);
+    for (let i = 0; i < 2; i++) { const [x, y] = at(R[i], -Math.PI / 2 + fr[i] * TAU); dot(x, y, pr, C.fg); }
+    if (!st) {
+      const [x, y] = at(R[2], -Math.PI / 2 + fr[2] * TAU); dot(x, y, pr, C.fg);
+    } else {
+      // 時の軌道：12の位置から進行中の回の先端までが濃い線。点は終えた回の位置
+      const ang = u => -Math.PI / 2 + u / 12 * TAU;
+      ctx.strokeStyle = C.fg; ctx.lineWidth = 1.5;
+      const slide = ease(Math.min(1, st.t / SLIDE));
+      let pos = null;
+      if (st.phase === 'long') {
+        ctx.beginPath(); ctx.arc(S, S, R[2], 0, TAU); ctx.stroke();
+        pos = 11 + slide;
+      } else {
+        ctx.beginPath(); ctx.arc(S, S, R[2], ang(0), ang(st.r + st.t / ROUND)); ctx.stroke();
+        if (st.r > 0) pos = st.r - 1 + slide;
+        else if (st.justEnded) pos = 12;
+      }
+      if (pos !== null) { const [x, y] = at(R[2], ang(pos)); dot(x, y, pr, C.fg); }
+    }
+  }
+
+  // ---------- カレンダー ----------
+  let range = 'week';
+  let sel = new Date(); sel.setHours(0, 0, 0, 0);
+  let filter = 'all'; // 'all' | タスクid | '__none'
+  let idx = new Map();
+  const fkey = () => filter === '__none' ? null : filter;
+  const valOf = rec => !rec ? 0 : filter === 'all' ? rec.total : (rec.by.get(fkey()) || 0);
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const todayStart = () => { const t = new Date(); t.setHours(0, 0, 0, 0); return t; };
+
+  function renderFilters(src) {
+    const used = new Set();
+    idx.forEach(rec => rec.by.forEach((v, k) => used.add(k)));
+    const opts = [['all', 'すべて', null]];
+    src.tasks.forEach(t => { if (!t.deleted || used.has(t.id)) opts.push([t.id, t.name, shadeOf(src, t.id)]); });
+    if (used.has(null)) opts.push(['__none', 'タスクなし', 'var(--tn)']);
+    if (!opts.some(o => o[0] === filter)) filter = 'all';
+    $('filters').innerHTML = opts.map(([id, nm, sh]) =>
+      `<button class="pill glass${id === filter ? ' primary' : ''}" type="button" data-f="${esc(id)}" aria-pressed="${id === filter}">${sh ? `<span class="sw" style="background:${sh}"></span>` : ''}${esc(nm)}</button>`).join('');
+  }
+
+  function periodEntries() {
+    const y = sel.getFullYear(), m = sel.getMonth();
+    if (range === 'week') {
+      const st = new Date(sel); st.setDate(sel.getDate() - sel.getDay());
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(st); d.setDate(st.getDate() + i);
+        return { days: [d], label: `${WEEK[i]}`, sub: d.getDate(), date: d, sel: sameDay(d, sel) };
+      });
+    }
+    if (range === 'month') {
+      const n = new Date(y, m + 1, 0).getDate();
+      return Array.from({ length: n }, (_, i) => {
+        const d = new Date(y, m, i + 1);
+        return { days: [d], label: (i + 1 === 1 || (i + 1) % 5 === 0) ? String(i + 1) : '', date: d, sel: sameDay(d, sel) };
+      });
+    }
+    return Array.from({ length: 12 }, (_, i) => {
+      const n = new Date(y, i + 1, 0).getDate();
+      const days = Array.from({ length: n }, (_, j) => new Date(y, i, j + 1));
+      return { days, label: String(i + 1), date: new Date(y, i, Math.min(sel.getDate(), n)), sel: i === m };
+    });
+  }
+  function niceTop(ms) {
+    const mins = ms / MIN;
+    const steps = [30, 60, 120, 180, 240, 360, 480, 600, 720, 960, 1200, 1800, 2400, 3000, 3600, 4800, 6000, 7200, 9000, 12000, 18000];
+    return (steps.find(s => s >= mins) || Math.ceil(mins / 6000) * 6000) * MIN;
+  }
+  const fmtAxis = ms => { const m = Math.round(ms / MIN); return m < 60 ? `${m}分` : `${+(m / 60).toFixed(1)}時間`; };
+
+  function renderBars(src) {
+    const ents = periodEntries();
+    const order = filter === 'all' ? [...src.tasks.map(t => t.id), null] : [fkey()];
+    ents.forEach(e => {
+      e.by = new Map(); e.total = 0;
+      e.days.forEach(d => {
+        const rec = idx.get(dayKey(d));
+        if (!rec) return;
+        order.forEach(k => { const v = rec.by.get(k) || 0; if (v) { e.by.set(k, (e.by.get(k) || 0) + v); e.total += v; } });
+      });
+    });
+    const max = Math.max(0, ...ents.map(e => e.total));
+    const top = niceTop(Math.max(max, MIN));
+    let html = `<div class="grid-line" style="top:0"><span>${fmtAxis(top)}</span></div><div class="grid-line" style="top:50%"><span>${fmtAxis(top / 2)}</span></div>`;
+    ents.forEach((e, i) => {
+      const segs = order.filter(k => e.by.get(k)).map(k =>
+        `<i style="height:${e.by.get(k) / e.total * 100}%;background:${shadeOf(src, k)}"></i>`).join('');
+      const tip = `${range === 'year' ? `${i + 1}月` : `${e.date.getMonth() + 1}月${e.date.getDate()}日`} ${fmtPlain(e.total)}`;
+      html += `<button class="bar-col${e.sel ? ' sel' : ''}" type="button" data-i="${i}" title="${tip}" aria-label="${tip}"><span class="bar-stack" style="height:${e.total / top * 100}%">${segs}</span></button>`;
+    });
+    $('chart').innerHTML = html;
+    $('xlabels').innerHTML = ents.map(e => `<span class="${e.sel ? 'sel' : ''}">${range === 'week' ? `${e.label}<br>${e.sub}` : e.label}</span>`).join('');
+    $('chart').onclick = ev => {
+      const b = ev.target.closest('.bar-col'); if (!b) return;
+      sel = new Date(ents[+b.dataset.i].date); renderCalendar();
+    };
+    // 合計と、今日までの日数で割った1日平均
+    const total = ents.reduce((s, e) => s + e.total, 0);
+    const t0 = todayStart();
+    const elapsed = ents.reduce((s, e) => s + e.days.filter(d => d <= t0).length, 0);
+    $('barTotal').innerHTML = fmtLong(total);
+    $('barAvg').innerHTML = fmtLong(elapsed ? total / elapsed : 0);
+    const f = ents[0].days[0], l = ents[ents.length - 1].days[ents[ents.length - 1].days.length - 1];
+    $('barTitle').textContent = range === 'week' ? `${f.getMonth() + 1}月${f.getDate()}日〜${l.getMonth() + 1}月${l.getDate()}日`
+      : range === 'month' ? `${sel.getFullYear()}年${sel.getMonth() + 1}月` : `${sel.getFullYear()}年`;
+  }
+
+  function pieStyle(src, rec) {
+    if (!rec || !rec.total) return '';
+    if (filter !== 'all') {
+      const v = valOf(rec); if (!v) return '';
+      const p = v / rec.total * 100;
+      return `background:conic-gradient(${shadeOf(src, fkey())} 0 ${p}%, var(--track) ${p}% 100%)`;
+    }
+    let acc = 0; const stops = [];
+    [...src.tasks.map(t => t.id), null].forEach(k => {
+      const v = rec.by.get(k); if (!v) return;
+      const a = acc / rec.total * 100; acc += v; const b = acc / rec.total * 100;
+      stops.push(`${shadeOf(src, k)} ${a}% ${b}%`);
+    });
+    return `background:conic-gradient(${stops.join(',')})`;
+  }
+
+  function renderMonth(src) {
+    const y = sel.getFullYear(), m = sel.getMonth();
+    $('calTitle').textContent = `${y}年${m + 1}月`;
+    const first = new Date(y, m, 1).getDay(), n = new Date(y, m + 1, 0).getDate();
+    const t0 = todayStart();
+    let html = '<span></span>'.repeat(first);
+    for (let d = 1; d <= n; d++) {
+      const date = new Date(y, m, d), rec = idx.get(dayKey(date)), v = valOf(rec);
+      const ps = pieStyle(src, rec);
+      const cls = ['day', sameDay(date, t0) && 'today', sameDay(date, sel) && 'sel', date > t0 && 'future'].filter(Boolean).join(' ');
+      html += `<button class="${cls}" type="button" data-d="${d}" aria-label="${m + 1}月${d}日 ${fmtPlain(v)}">` +
+        `<span class="num">${d}</span><span class="pie${ps ? '' : ' empty'}" style="${ps}"></span><span class="tm">${fmtShort(v)}</span></button>`;
+    }
+    $('calGrid').innerHTML = html;
+  }
+
+  function renderDay(src) {
+    $('dayTitle').textContent = `${sel.getMonth() + 1}月${sel.getDate()}日（${WEEK[sel.getDay()]}）`;
+    const rec = idx.get(dayKey(sel));
+    $('dayTotal').innerHTML = fmtLong(valOf(rec));
+    const dayStart = sel.getTime(), span = 864e5;
+    const ps = rec ? rec.ps.filter(p => filter === 'all' || p.task === fkey()) : [];
+    let band = ps.map(p => `<i style="left:${(p.a - dayStart) / span * 100}%;width:${(p.b - p.a) / span * 100}%;background:${shadeOf(src, p.task)}"></i>`).join('');
+    if (sameDay(sel, todayStart())) band += `<b class="now" style="left:${(Date.now() - dayStart) / span * 100}%"></b>`;
+    $('band').innerHTML = band;
+    // 続いている同じタスクの区間はまとめる
+    const rows = [];
+    ps.slice().sort((a, b) => a.a - b.a).forEach(p => {
+      const last = rows[rows.length - 1];
+      if (last && last.b === p.a && last.task === p.task) last.b = p.b; else rows.push({ ...p });
+    });
+    $('dayList').innerHTML = rows.length ? rows.map(r =>
+      `<li><time>${fmtClock(r.a)}–${fmtClock(r.b)}</time><span class="sw" style="background:${shadeOf(src, r.task)}"></span><span class="nm">${esc(nameOf(src, r.task))}</span><span class="dur">${fmtPlain(r.b - r.a)}</span></li>`).join('')
+      : '<li><span class="none">この日の作業記録はありません</span></li>';
+  }
+
+  function renderCalendar() {
+    const src = source();
+    idx = buildIndex(src);
+    $('demoBanner').hidden = !demo;
+    $('emptyCard').hidden = !!demo || data.sessions.length > 0;
+    renderFilters(src);
+    renderBars(src);
+    renderMonth(src);
+    renderDay(src);
+  }
+
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    range = b.dataset.range;
+    document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-selected', x === b));
+    renderCalendar();
+  }));
+  function shift(unit, k) {
+    const d = new Date(sel);
+    if (unit === 'week') d.setDate(d.getDate() + 7 * k);
+    else if (unit === 'month') { const day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + k); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); }
+    else { const day = d.getDate(), mo = d.getMonth(); d.setDate(1); d.setFullYear(d.getFullYear() + k); d.setDate(Math.min(day, new Date(d.getFullYear(), mo + 1, 0).getDate())); }
+    sel = d; renderCalendar();
+  }
+  $('barPrev').addEventListener('click', () => shift(range, -1));
+  $('barNext').addEventListener('click', () => shift(range, 1));
+  $('calPrev').addEventListener('click', () => shift('month', -1));
+  $('calNext').addEventListener('click', () => shift('month', 1));
+  $('calGrid').addEventListener('click', ev => {
+    const b = ev.target.closest('.day'); if (!b) return;
+    sel = new Date(sel.getFullYear(), sel.getMonth(), +b.dataset.d); renderCalendar();
+  });
+  $('filters').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-f]'); if (!b) return;
+    filter = b.dataset.f; renderCalendar();
+  });
+  $('demoOn').addEventListener('click', () => { demo = makeDemo(); renderCalendar(); });
+  $('demoOff').addEventListener('click', () => { demo = null; filter = 'all'; renderCalendar(); });
+
+  // ---------- タスク ----------
+  let confirmId = null, editId = null;
+  function renderTasks() {
+    const ix = buildIndex(data), today = ix.get(dayKey(new Date()));
+    const totals = new Map();
+    ix.forEach(rec => rec.by.forEach((v, k) => totals.set(k, (totals.get(k) || 0) + v)));
+    const rows = [{ id: null, name: 'タスクなし' }, ...data.tasks.filter(t => !t.deleted)];
+    $('taskList').innerHTML = rows.map(t => {
+      const isSel = (data.current ?? null) === t.id;
+      const meta = `今日 ${fmtPlain(today ? today.by.get(t.id) || 0 : 0)}・合計 ${fmtPlain(totals.get(t.id) || 0)}`;
+      const nameHtml = editId === t.id && t.id
+        ? `<input value="${esc(t.name)}" maxlength="40" data-edit="${t.id}" aria-label="タスク名">`
+        : `<span>${esc(t.name)}</span>`;
+      const tools = t.id ? `
+        <button class="icon-btn" type="button" data-act="edit" aria-label="「${esc(t.name)}」の名前を変更"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg></button>
+        <button class="icon-btn" type="button" data-act="del" aria-label="「${esc(t.name)}」を削除"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>` : '<span></span><span></span>';
+      const conf = confirmId === t.id && t.id ? `
+        <div class="confirm"><span>「${esc(t.name)}」を削除しますか？ これまでの作業記録は統計に残ります。</span>
+          <button class="pill primary" type="button" data-act="yes">削除する</button>
+          <button class="pill glass" type="button" data-act="no">やめる</button></div>` : '';
+      return `<li class="task-row${isSel ? ' sel' : ''}" data-id="${t.id ?? ''}">
+        <button class="pick" type="button" data-act="pick" aria-pressed="${isSel}">
+          <span class="radio"></span>
+          <span class="tname"><span class="sw" style="background:${shadeOf(data, t.id)}"></span>${nameHtml}</span>
+          <span class="tmeta">${meta}</span>
+        </button>${tools}${conf}</li>`;
+    }).join('');
+    const inp = $('taskList').querySelector('[data-edit]');
+    if (inp) { inp.focus(); inp.select(); }
+  }
+  function selectTask(id) {
+    if ((data.current ?? null) === id) return;
+    data.current = id;
+    const s = activeSession();
+    if (s) s.sw.push([Date.now(), id]); // ポモドーロ中なら、ここから先を新しいタスクに記録
+    save(); applyHome();
+  }
+  function commitEdit(input) {
+    const t = data.tasks.find(x => x.id === input.dataset.edit);
+    const v = input.value.trim();
+    if (t && v) t.name = v;
+    editId = null; save(); applyHome(); renderTasks();
+  }
+  $('taskList').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-act]'); if (!b) return;
+    const row = b.closest('.task-row'), id = row.dataset.id || null, act = b.dataset.act;
+    if (act === 'pick') { if (editId) return; selectTask(id); confirmId = null; }
+    else if (act === 'edit') { editId = id; confirmId = null; }
+    else if (act === 'del') { confirmId = confirmId === id ? null : id; editId = null; }
+    else if (act === 'no') confirmId = null;
+    else if (act === 'yes') {
+      const t = data.tasks.find(x => x.id === id);
+      if (t) t.deleted = true;
+      if (data.current === id) selectTask(null);
+      confirmId = null; save(); applyHome();
+    }
+    renderTasks();
+  });
+  $('taskList').addEventListener('keydown', ev => {
+    if (ev.target.dataset.edit && ev.key === 'Enter') { ev.preventDefault(); commitEdit(ev.target); }
+    if (ev.target.dataset.edit && ev.key === 'Escape') { editId = null; renderTasks(); }
+  });
+  $('taskList').addEventListener('focusout', ev => { if (ev.target.dataset && ev.target.dataset.edit && editId) commitEdit(ev.target); });
+  $('taskForm').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const v = $('taskInput').value.trim();
+    if (!v) return;
+    const t = { id: newId(), name: v };
+    data.tasks.push(t);
+    $('taskInput').value = '';
+    save();
+    selectTask(t.id); // 追加したタスクをそのまま選ぶ
+    renderTasks();
+  });
+
+  // ---------- ページ切り替え ----------
+  const PAGES = ['calendar', 'home', 'tasks'];
+  let page = 'home';
+  const lens = $('lens');
+  function placeLens(animate) {
+    const btn = document.querySelector(`.tab[data-tab="${page}"]`);
+    lens.style.width = btn.offsetWidth + 'px';
+    lens.style.transform = `translateX(${btn.offsetLeft}px)`;
+    if (animate) { lens.classList.remove('stretch'); void lens.offsetWidth; lens.classList.add('stretch'); }
+  }
+  function show(p) {
+    if (!PAGES.includes(p)) p = 'home';
+    const changed = p !== page;
+    page = p;
+    PAGES.forEach(x => { $('page-' + x).hidden = x !== p; });
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === p));
+    sky.style.opacity = p === 'home' ? '0' : '1';
+    placeLens(changed);
+    if (p === 'calendar') renderCalendar();
+    if (p === 'tasks') { editId = null; confirmId = null; renderTasks(); }
+    if (p === 'home') resizeClock();
+    try { history.replaceState(null, '', '#' + p); } catch (e) {}
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+  addEventListener('resize', () => { drawSky(); placeLens(false); });
+
+  // 進行中のポモドーロがあるときは、統計を30秒ごとに更新
+  setInterval(() => {
+    if (!activeSession()) return;
+    if (page === 'calendar') renderCalendar();
+    if (page === 'tasks' && !editId) renderTasks();
+  }, 30000);
+
+  function frame() {
+    requestAnimationFrame(frame);
+    if (page === 'home') drawClock();
+  }
+
+  readColors();
+  applyHome();
+  show((location.hash || '').slice(1) || 'home');
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+</script>
+</body>
+</html>
